@@ -11,7 +11,7 @@ use syn::{
 // Attribute arguments
 // ---------------------------------------------------------------------------
 
-/// Parsed form of `#[openapi(path = "/foo", method = "get", ...)]`.
+/// Parsed form of `#[endpoint(path = "/foo", method = "get", ...)]`.
 struct OpenApiArgs {
     path: String,
     method: String,
@@ -92,7 +92,7 @@ impl Parse for OpenApiArgs {
         let path = path.ok_or_else(|| {
             syn::Error::new(
                 proc_macro2::Span::call_site(),
-                "missing required `path` argument for #[openapi]",
+                "missing required `path` argument for #[endpoint]",
             )
         })?;
 
@@ -113,18 +113,19 @@ impl Parse for OpenApiArgs {
 // ---------------------------------------------------------------------------
 
 /// Attribute macro that annotates an async handler function with OpenAPI
-/// metadata and generates a hidden registration helper.
+/// metadata and generates a hidden [`RouteHandle`] const (accessible via the
+/// [`handler!`] macro).
 ///
 /// # Example
 ///
 /// ```ignore
-/// #[zenix::openapi(path = "/hello", method = "get", tag = "Greetings")]
+/// #[zenix::endpoint(path = "/hello", method = "get", tag = "Greetings")]
 /// async fn hello() -> impl Serialize {
 ///     serde_json::json!({ "message": "Hello!" })
 /// }
 /// ```
 #[proc_macro_attribute]
-pub fn openapi(attr: TokenStream, item: TokenStream) -> TokenStream {
+pub fn endpoint(attr: TokenStream, item: TokenStream) -> TokenStream {
     let args: OpenApiArgs = match syn::parse(attr) {
         Ok(a) => a,
         Err(e) => return e.to_compile_error().into(),
@@ -142,16 +143,16 @@ fn expand(args: OpenApiArgs, item_fn: ItemFn) -> TokenStream {
     let fn_name = &item_fn.sig.ident;
     let fn_vis = &item_fn.vis;
 
-    // Hide existing #[openapi(...)] attribute from the output function so we
+    // Hide existing #[endpoint(...)] attribute from the output function so we
     // don't recurse — keep all other attributes.
     let other_attrs: Vec<&Attribute> = item_fn
         .attrs
         .iter()
-        .filter(|a| !a.path().is_ident("openapi"))
+        .filter(|a| !a.path().is_ident("endpoint"))
         .collect();
 
     let register_fn_name = format_ident!("__zenix_register_{}", fn_name);
-    let route_const_name = format_ident!("{}_route", fn_name);
+    let handle_const_name = format_ident!("{}_handle", fn_name);
 
     let path = &args.path;
     let method_str = &args.method;
@@ -200,7 +201,7 @@ fn expand(args: OpenApiArgs, item_fn: ItemFn) -> TokenStream {
 
         #[doc(hidden)]
         #[allow(non_upper_case_globals)]
-        #fn_vis const #route_const_name: ::zenix::RouteHandle =
+        #fn_vis const #handle_const_name: ::zenix::RouteHandle =
             ::zenix::RouteHandle::new(#register_fn_name);
     };
 
