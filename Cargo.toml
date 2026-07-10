@@ -2,6 +2,11 @@
 name = "zenix-macros"
 version = "0.1.0"
 edition = "2024"
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/gachors/zenix-macros"
+homepage = "https://github.com/gachors/zenix-macros"
+description = "Proc-macro crate for zenix."
 
 [lib]
 proc-macro = true
